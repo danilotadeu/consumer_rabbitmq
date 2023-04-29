@@ -27,12 +27,11 @@ func (s *Server) Start() {
 	rabbitMQ := rabbitmq.Connect(s.URL)
 	userEvent := user.NewEvent()
 
-	var forever chan bool
-
 	queueUserCreated := rabbitMQ.DeclareAndBind(user.UserCreated, user.UserCreatedService)
 	rabbitMQ.Consume(queueUserCreated, userEvent.UserCreation)
 
-	log.Println(" [*] - listening messages from rabbitMQ")
+	var forever chan bool
+	log.Println(" [*] -> listening messages from rabbitMQ")
 
 	gracefulShutdown := make(chan os.Signal, 1)
 	signal.Notify(gracefulShutdown, os.Interrupt)
