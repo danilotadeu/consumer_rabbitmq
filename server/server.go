@@ -1,6 +1,10 @@
 package server
 
 import (
+	"log"
+	"os"
+	"os/signal"
+
 	"github.com/consumer_rabbitmq/events/user"
 	"github.com/consumer_rabbitmq/rabbitmq"
 )
@@ -23,8 +27,21 @@ func (s *Server) Start() {
 	rabbitMQ := rabbitmq.Connect(s.URL)
 	userEvent := user.NewEvent()
 
-	queueUserCreated := rabbitMQ.DeclareAndBind("user_created_service_1", "user_created")
+	var forever chan bool
+
+	queueUserCreated := rabbitMQ.DeclareAndBind(user.UserCreated, user.UserCreatedService)
 	rabbitMQ.Consume(queueUserCreated, userEvent.UserCreation)
 
-	select {}
+	log.Println(" [*] - listening messages from rabbitMQ")
+
+	gracefulShutdown := make(chan os.Signal, 1)
+	signal.Notify(gracefulShutdown, os.Interrupt)
+	go func() {
+		<-gracefulShutdown
+		_ = rabbitMQ.Connection.Close()
+		_ = rabbitMQ.Channel.Close()
+		os.Exit(1)
+	}()
+
+	<-forever
 }

@@ -36,21 +36,20 @@ func Connect(URL string) *rabbitMQ {
 	}
 }
 
-func (r *rabbitMQ) DeclareAndBind(queueName, exchange string) amqp.Queue {
-	q, err := r.Channel.QueueDeclare(queueName, true, false, false, false, nil)
+func (r *rabbitMQ) DeclareAndBind(exchange, queueName string) amqp.Queue {
+	queue, err := r.Channel.QueueDeclare(queueName, true, false, false, false, nil)
 	if err != nil {
 		log.Fatalf("Failed to declare queue: %v", err)
 		panic(err)
 	}
 
-	err = r.Channel.QueueBind(
-		q.Name, "", exchange, false, nil)
+	err = r.Channel.QueueBind(queue.Name, "", exchange, false, nil)
 	if err != nil {
 		log.Fatalf("Failed to bind queue: %v", err)
 		panic(err)
 	}
 
-	return q
+	return queue
 }
 
 func (r *rabbitMQ) Consume(queue amqp.Queue, handler func(amqp.Delivery) error) {

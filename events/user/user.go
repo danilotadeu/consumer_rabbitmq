@@ -9,6 +9,9 @@ import (
 	"github.com/streadway/amqp"
 )
 
+const UserCreatedService = "user_created_service_1"
+const UserCreated = "user_created"
+
 type UserEvent interface {
 	UserCreation(msg amqp.Delivery) error
 }
