@@ -24,11 +24,10 @@ func NewServer(URL string) ServerI {
 }
 
 func (s *Server) Start() {
-	rabbitMQ := rabbitmq.Connect(s.URL)
+	rabbitmq := rabbitmq.NewRabbitMQ(s.URL).Connect()
 	userEvent := user.NewEvent()
 
-	queueUserCreated := rabbitMQ.DeclareAndBind(user.UserCreated, user.UserCreatedService)
-	rabbitMQ.Consume(queueUserCreated, userEvent.UserCreation)
+	userCreationConsumer := rabbitmq.Consume(userEvent.UserCreation, "", user.UserCreated, user.UserCreatedService)
 
 	var forever chan bool
 	log.Println(" [*] -> listening messages from rabbitMQ")
@@ -37,8 +36,8 @@ func (s *Server) Start() {
 	signal.Notify(gracefulShutdown, os.Interrupt)
 	go func() {
 		<-gracefulShutdown
-		_ = rabbitMQ.Connection.Close()
-		_ = rabbitMQ.Channel.Close()
+		userCreationConsumer.Close()
+		_ = rabbitmq.Connection.Close()
 		os.Exit(1)
 	}()
 

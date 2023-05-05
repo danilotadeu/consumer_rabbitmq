@@ -1,73 +1,59 @@
 package rabbitmq
 
 import (
-	"fmt"
 	"log"
 
-	"github.com/streadway/amqp"
+	rabbitMQClient "github.com/wagslane/go-rabbitmq"
 )
 
 type RabbitMQI interface {
-	DeclareAndBind(queueName, exchange string) amqp.Queue
-	Consume(queue amqp.Queue, handler func(amqp.Delivery) error)
+	Connect() *RabbitMQ
+	Consume(handler func(d rabbitMQClient.Delivery) rabbitMQClient.Action, routingKey string, exchangeName string, queue string) *rabbitMQClient.Consumer
 }
 
-type rabbitMQ struct {
-	Channel    *amqp.Channel
-	Connection *amqp.Connection
+type RabbitMQ struct {
+	Connection *rabbitMQClient.Conn
+	URL        string
 }
 
-func Connect(URL string) *rabbitMQ {
-	conn, err := amqp.Dial(URL)
+func NewRabbitMQ(url string) RabbitMQI {
+	return &RabbitMQ{
+		URL: url,
+	}
+}
+
+func (r *RabbitMQ) Connect() *RabbitMQ {
+	conn, err := rabbitMQClient.NewConn(r.URL, rabbitMQClient.WithConnectionOptionsLogging)
 	if err != nil {
-		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
-		panic(err)
+		log.Fatal(err)
 	}
 
-	ch, err := conn.Channel()
-	if err != nil {
-		log.Fatalf("Failed to open a channel: %v", err)
-		panic(err)
-	}
-
-	return &rabbitMQ{
+	return &RabbitMQ{
 		Connection: conn,
-		Channel:    ch,
 	}
 }
 
-func (r *rabbitMQ) DeclareAndBind(exchange, queueName string) amqp.Queue {
-	queue, err := r.Channel.QueueDeclare(queueName, true, false, false, false, nil)
+func (r *RabbitMQ) Consume(
+	handler func(d rabbitMQClient.Delivery) rabbitMQClient.Action,
+	routingKey string,
+	exchangeName string,
+	queue string) *rabbitMQClient.Consumer {
+
+	consumer, err := rabbitMQClient.NewConsumer(
+		r.Connection,
+		handler,
+		queue,
+		rabbitMQClient.WithConsumerOptionsRoutingKey(routingKey),
+		rabbitMQClient.WithConsumerOptionsExchangeName(exchangeName),
+		rabbitMQClient.WithConsumerOptionsExchangeKind("fanout"),
+		rabbitMQClient.WithConsumerOptionsExchangeDurable,
+		rabbitMQClient.WithConsumerOptionsQueueDurable,
+		rabbitMQClient.WithConsumerOptionsExchangeDeclare,
+		rabbitMQClient.WithConsumerOptionsConcurrency(10),
+	)
 	if err != nil {
-		log.Fatalf("Failed to declare queue: %v", err)
 		panic(err)
 	}
 
-	err = r.Channel.QueueBind(queue.Name, "", exchange, false, nil)
-	if err != nil {
-		log.Fatalf("Failed to bind queue: %v", err)
-		panic(err)
-	}
-
-	return queue
-}
-
-func (r *rabbitMQ) Consume(queue amqp.Queue, handler func(amqp.Delivery) error) {
-	msgs, err := r.Channel.Consume(queue.Name, "", false, false, false, false, nil)
-	if err != nil {
-		log.Fatalf("Failed to consume messages: %v", err)
-	}
-
-	for i := 0; i < 10; i++ {
-		go consumeMessages(msgs, handler)
-	}
-}
-
-func consumeMessages(msgs <-chan amqp.Delivery, handler func(amqp.Delivery) error) {
-	for msg := range msgs {
-		err := handler(msg)
-		if err != nil {
-			fmt.Println("error in handler, you can put this message in DLQ " + err.Error())
-		}
-	}
+	return consumer
 }
